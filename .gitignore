@@ -42,6 +42,8 @@
 build/
 Build/
 build-*/
+cmake-build-*/
+out/
 
 # CMake generated files
 CMakeFiles/
@@ -50,6 +52,13 @@ cmake_install.cmake
 Makefile
 install_manifest.txt
 compile_commands.json
+
+# IDE / editor files
+.idea/
+.vs/
+.vscode/
+*.user
+*.suo
 
 # Temporary files
 *.tmp
@@ -66,3 +75,16 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets / local config
+.env
+
+# Exceptions: prebuilt GLFW library needed to build (MinGW)
+!dependencies/glfw-3.5.1.bin.WIN64/
+!dependencies/glfw-3.5.1.bin.WIN64/lib-mingw-w64/
+!dependencies/glfw-3.5.1.bin.WIN64/lib-mingw-w64/libglfw3.a
+!dependencies/glfw-3.5.1.bin.WIN64/lib-mingw-w64/glfw3.dll
