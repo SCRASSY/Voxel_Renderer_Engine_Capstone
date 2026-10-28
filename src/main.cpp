@@ -34,6 +34,8 @@ static camera *playerCamObj = nullptr;
 
 static std::vector<Chunk> worldChunks = {};
 
+static TextureAtlasData gameGlobalTextureAtlasData = {};
+
 // FUNC DECLARATIONS
 static void setup_glfw();
 static void update_inputs();
@@ -42,8 +44,8 @@ static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 static void process_input();
 static void link_callback_functions();
 static bool create_engine_window();
-static void create_chunk(int chunkSize);
-static void create_terrain();
+static void generate_chunk(glm::vec3 chunkPos);
+static void generate_terrain();
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
@@ -93,6 +95,7 @@ int main() {
         .WINDOW_HEIGHT = WINDOW_HEIGHT
     };
     playerCamObj = new camera(cwd);
+    playerCamObj->cameraPos = glm::vec3(0.0f, 2.0f, 0.0f);
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -115,27 +118,22 @@ int main() {
      */
     glEnable(GL_DEPTH_TEST);
 
-    const TextureAtlasData tad = {
+    // sets the global texture atlas data to be the newly loaded game texture atlas
+    gameGlobalTextureAtlasData = {
         .textureAtlasWidth = textureAtlasWidth,
         .textureAtlasHeight = textureAtlasHeight
     };
 
-    // -- CHUNK TESTING --
-    Chunk testChunk(tad, glm::vec3(1.0f));
-    testChunk.worldPos = glm::vec3(10.0f, 0.0f, 0.0f);
+    constexpr int terrainRadius = 8;
+    for (int x = -terrainRadius / 2; x < terrainRadius / 2; ++x) {
+        for (int z = -terrainRadius / 2; z < terrainRadius / 2; ++z) {
+            const auto worldOrigin = glm::vec3(0.0f, -CHUNK_SIZE_Y / 2, 0.0f);
+            const auto newChunkPos = worldOrigin + glm::vec3(CHUNK_SIZE_X * x, 0.0f, CHUNK_SIZE_Z * z);
 
-    // creates the voxels in the chunk
-    for (int x = 0; x < CHUNK_SIZE; ++x) {
-        for (int y = 0; y < CHUNK_SIZE; ++y) {
-            for (int z = 0; z < CHUNK_SIZE; ++z) {
-                testChunk.voxels[x][y][z] = y < 8 ? 1 : 0;
-            }
+            // generates a new game chunk & adds it to the game worlds chunk list
+            generate_chunk(newChunkPos);
         }
     }
-
-    testChunk.build_chunk(testChunk);
-    worldChunks.push_back(testChunk);
-    // -- END OF CHUNK TESTING --
 
     // main render loop
     while (!glfwWindowShouldClose(window)) {
@@ -168,13 +166,13 @@ void update_inputs() {
     glfwPollEvents();
 }
 void update_render() {
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-    //glClearColor(0.4706f, 0.6549f, 1.0f, 1.0f);
+    //glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClearColor(0.4706f, 0.7f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     glClear(GL_DEPTH_BUFFER_BIT);
 
     // holds a list of blocks to draw
-    std::vector<voxel> voxels{};
+    // std::vector<voxel> voxels{};
 
     // this is the list of blocks currently in the scene
     //  voxel currentVoxel(BlockType::DIRT, tad, chunckPos + glm::vec3(x, y, z));
@@ -189,9 +187,9 @@ void update_render() {
     //
     // voxels.push_back(currentVoxel);
 
-    std::vector<light> lights = {
-        light(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
-    };
+    // std::vector<light> lights = {
+    //     light(glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f)),
+    // };
 
     // -- CAMERA --
     playerCamObj->update_cam_view();
@@ -201,83 +199,83 @@ void update_render() {
     engineShaderProgram->change_shader_program("LightProgram");
     engineShaderProgram->use();
 
-    // renders each light source in the light list
-    for (int i = 0; i < lights.size(); ++i) {
-        light *currentLight = &lights[i];
-
-        const float rotationDir = i % 2 == 0 ? -1 : 1;
-
-        glm::mat4 _model(1.0f);
-        _model = glm::translate(_model, currentLight->position);
-        _model = glm::rotate(_model, static_cast<float>(glfwGetTime() * 0.5f) * glm::radians(50.0f * rotationDir), glm::vec3(0.5f, 1.0f, 0.5f));
-        _model = glm::scale(_model, glm::vec3(1.0f));
-
-        const float color_r = (sin(glfwGetTime()) * 1.0f + 1) / 2;
-        const float color_g = (cos(glfwGetTime()) * 1.0f + 1) / 2;
-        const float color_b = (sin(glfwGetTime()) * 1.0f + 1) / 2;
-
-        // currentLight->m_color = glm::vec4(
-        //     glm::max(color_r, 0.2f),
-        //     glm::max(color_b, 0.2f),
-        //     glm::max(color_g, 0.2f),
-        //     1.0f
-        //     );
-
-        engineShaderProgram->set_mat4("model", _model);
-        engineShaderProgram->set_mat4("view", playerCamObj->cameraView);
-        engineShaderProgram->set_mat4("projection", playerCamObj->cameraProjection);
-
-        // set shader program uniform [LIGHT OBJ COLOR]
-        const GLint _colorLoc = glGetUniformLocation(engineShaderProgram->m_currentShaderProgramID, "color");
-        glUniform4fv(_colorLoc, 1, glm::value_ptr(currentLight->m_color));
-
-        // draws this object
-        currentLight->draw_obj();
-    }
+    // // renders each light source in the light list
+    // for (int i = 0; i < lights.size(); ++i) {
+    //     light *currentLight = &lights[i];
+    //
+    //     const float rotationDir = i % 2 == 0 ? -1 : 1;
+    //
+    //     glm::mat4 _model(1.0f);
+    //     _model = glm::translate(_model, currentLight->position);
+    //     _model = glm::rotate(_model, static_cast<float>(glfwGetTime() * 0.5f) * glm::radians(50.0f * rotationDir), glm::vec3(0.5f, 1.0f, 0.5f));
+    //     _model = glm::scale(_model, glm::vec3(1.0f));
+    //
+    //     const float color_r = (sin(glfwGetTime()) * 1.0f + 1) / 2;
+    //     const float color_g = (cos(glfwGetTime()) * 1.0f + 1) / 2;
+    //     const float color_b = (sin(glfwGetTime()) * 1.0f + 1) / 2;
+    //
+    //     // currentLight->m_color = glm::vec4(
+    //     //     glm::max(color_r, 0.2f),
+    //     //     glm::max(color_b, 0.2f),
+    //     //     glm::max(color_g, 0.2f),
+    //     //     1.0f
+    //     //     );
+    //
+    //     engineShaderProgram->set_mat4("model", _model);
+    //     engineShaderProgram->set_mat4("view", playerCamObj->cameraView);
+    //     engineShaderProgram->set_mat4("projection", playerCamObj->cameraProjection);
+    //
+    //     // set shader program uniform [LIGHT OBJ COLOR]
+    //     const GLint _colorLoc = glGetUniformLocation(engineShaderProgram->m_currentShaderProgramID, "color");
+    //     glUniform4fv(_colorLoc, 1, glm::value_ptr(currentLight->m_color));
+    //
+    //     // draws this object
+    //     currentLight->draw_obj();
+    // }
 
     // changes the engines current shader program to use the texture shader program, used when rendering objects with textures
     engineShaderProgram->change_shader_program("TextureProgram");
     engineShaderProgram->use();
 
-    // -- RENDER VOXELS --
-    for (auto &i : voxels) {
-        voxel *currentVoxel = &i;
-
-        // sets the current cameras location uniform in the current fragment shader
-        engineShaderProgram->set_vec3("viewPos", playerCamObj->cameraPos);
-
-        glm::mat4 _model(1.0f);
-        _model = glm::translate(_model, currentVoxel->position);//glm::vec3(newPosX, newPosY, newPosZ));
-        _model = glm::scale(_model, currentVoxel->scale);
-
-        auto lightColorVec = glm::vec3(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b);
-        auto lightViewPos = glm::vec3(playerCamObj->cameraView * glm::vec4(lights[0].position, 1.0f)); // converts the lights position world space to the cameras view space
-
-        // sets the current engines shader uniforms
-        engineShaderProgram->set_vec3("lightColor", lightColorVec);
-        engineShaderProgram->set_vec3("lightPos", lightViewPos);
-        engineShaderProgram->set_mat4("model", _model);
-        engineShaderProgram->set_mat4("view", playerCamObj->cameraView);
-        engineShaderProgram->set_mat4("projection", playerCamObj->cameraProjection);
-        engineShaderProgram->set_float("material.ambient", currentVoxel->material.ambient);
-        engineShaderProgram->set_float("material.diffuse", currentVoxel->material.diffuse);
-        engineShaderProgram->set_float("material.specular", currentVoxel->material.specular);
-        engineShaderProgram->set_float("material.shininess", currentVoxel->material.shininess);
-
-        // draws this object
-        currentVoxel->draw_obj();
-    }
+    // // -- RENDER VOXELS --
+    // for (auto &i : voxels) {
+    //     voxel *currentVoxel = &i;
+    //
+    //     // sets the current cameras location uniform in the current fragment shader
+    //     engineShaderProgram->set_vec3("viewPos", playerCamObj->cameraPos);
+    //
+    //     glm::mat4 _model(1.0f);
+    //     _model = glm::translate(_model, currentVoxel->position);//glm::vec3(newPosX, newPosY, newPosZ));
+    //     _model = glm::scale(_model, currentVoxel->scale);
+    //
+    //     auto lightColorVec = glm::vec3(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b);
+    //     auto lightViewPos = glm::vec3(playerCamObj->cameraView * glm::vec4(lights[0].position, 1.0f)); // converts the lights position world space to the cameras view space
+    //
+    //     // sets the current engines shader uniforms
+    //     engineShaderProgram->set_vec3("lightColor", lightColorVec);
+    //     engineShaderProgram->set_vec3("lightPos", lightViewPos);
+    //     engineShaderProgram->set_mat4("model", _model);
+    //     engineShaderProgram->set_mat4("view", playerCamObj->cameraView);
+    //     engineShaderProgram->set_mat4("projection", playerCamObj->cameraProjection);
+    //     engineShaderProgram->set_float("material.ambient", currentVoxel->material.ambient);
+    //     engineShaderProgram->set_float("material.diffuse", currentVoxel->material.diffuse);
+    //     engineShaderProgram->set_float("material.specular", currentVoxel->material.specular);
+    //     engineShaderProgram->set_float("material.shininess", currentVoxel->material.shininess);
+    //
+    //     // draws this object
+    //     currentVoxel->draw_obj();
+    // }
 
     // -- RENDER CHUNK --
     for (auto &currentChunk: worldChunks) {
         auto model = glm::translate(glm::mat4(1.0f), currentChunk.worldPos);
-        auto lightColorVec = glm::vec3(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b);
-        auto lightViewPos = glm::vec3(playerCamObj->cameraView * glm::vec4(lights[0].position, 1.0f)); // converts the lights position world space to the cameras view space
+        //auto lightColorVec = glm::vec3(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b);
+        //auto lightViewPos = glm::vec3(playerCamObj->cameraView * glm::vec4(lights[0].position, 1.0f)); // converts the lights position world space to the cameras view space
 
         // sets the current engines shader uniforms
         engineShaderProgram->set_vec3("viewPos", playerCamObj->cameraPos);
-        engineShaderProgram->set_vec3("lightColor", lightColorVec);
-        engineShaderProgram->set_vec3("lightPos", lightViewPos);
+        //engineShaderProgram->set_vec3("lightColor", lightColorVec);
+        //engineShaderProgram->set_vec3("lightPos", lightViewPos);
         engineShaderProgram->set_mat4("model", model);
         engineShaderProgram->set_mat4("view", playerCamObj->cameraView);
         engineShaderProgram->set_mat4("projection", playerCamObj->cameraProjection);
@@ -325,7 +323,11 @@ void process_input() {
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         playerCamObj->move_cam(MovementDirection::UP, deltaTime);
     }
-}  
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        playerCamObj->move_cam(MovementDirection::DOWN, deltaTime);
+    }
+
+}
 void link_callback_functions() {
     // updates OpenGL's available render screen space when the window is resized
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -343,6 +345,32 @@ bool create_engine_window() {
     glfwMakeContextCurrent(window);
 
     return true;
+}
+
+void generate_chunk(glm::vec3 chunkPos) {
+    // -- CHUNK TESTING --
+    Chunk localChunk(gameGlobalTextureAtlasData, chunkPos);
+    localChunk.worldPos = chunkPos;
+
+    // creates the voxels in the chunk
+    for (int x = 0; x < CHUNK_SIZE_X; ++x) {
+        for (int y = 0; y < CHUNK_SIZE_Y; ++y) {
+            for (int z = 0; z < CHUNK_SIZE_Z; ++z) {
+                if (y < CHUNK_SIZE_Y / 2) {
+                    localChunk.voxels[x][y][z] = 1;
+                    continue;
+                }
+                if (y == CHUNK_SIZE_Y / 2) {
+                    localChunk.voxels[x][y][z] = 3;
+                    continue;
+                }
+                localChunk.voxels[x][y][z] = 0;
+            }
+        }
+    }
+
+    localChunk.build_chunk(localChunk);
+    worldChunks.push_back(localChunk);
 }
 void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     if (isFirstMouseCall) {

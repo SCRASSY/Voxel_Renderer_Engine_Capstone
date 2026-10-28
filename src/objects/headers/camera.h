@@ -11,7 +11,8 @@ enum class MovementDirection {
     BACKWARD,
     LEFT,
     RIGHT,
-    UP
+    UP,
+    DOWN
 };
 
 struct CameraWindowData {
@@ -28,7 +29,7 @@ public:
     glm::vec3 cameraForward = glm::vec3(0.0f, 0.0f, -1.0f);
     glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-    float cameraSpeed = 3.0f;
+    float cameraSpeed = 5.0f;
     float cameraSensitivity = 0.1f;
     float cameraFov = 90.0f;
     float cameraYaw = -90.0f;

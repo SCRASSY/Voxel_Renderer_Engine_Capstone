@@ -44,6 +44,9 @@ void camera::move_cam(const MovementDirection movementDir, const float deltaTime
         case MovementDirection::UP:
             cameraPos += finalCameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f); // moves the camera up in world space
             break;
+        case MovementDirection::DOWN:
+            cameraPos += finalCameraSpeed * glm::vec3(0.0f, -1.0f, 0.0f); // moves the camera down in world space
+            break;
     }
 }
 

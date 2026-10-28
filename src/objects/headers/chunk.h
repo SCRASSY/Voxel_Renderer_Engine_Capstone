@@ -5,11 +5,15 @@
 #ifndef OPENGL_TUTORIAL_CHUNK_H
 #define OPENGL_TUTORIAL_CHUNK_H
 
+#include <map>
+
 #include "object.h"
 #include "glad/glad.h"
 #include "glm/glm.hpp"
 
-constexpr int CHUNK_SIZE = 8;
+constexpr int CHUNK_SIZE_X = 16;
+constexpr int CHUNK_SIZE_Y = 128;
+constexpr int CHUNK_SIZE_Z = 16;
 
 struct FaceData {
     int neighbour[3];
@@ -35,8 +39,10 @@ struct Vertex {
 
 class Chunk {
 public:
-    uint8_t voxels[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE] = {}; // all indices = 0 / air
+    uint8_t voxels[CHUNK_SIZE_X][CHUNK_SIZE_Y][CHUNK_SIZE_Z] = {}; // all indices = 0 / air
     glm::vec3 worldPos{0.0f};
+
+    TextureAtlasData chunkTad = {};
 
     GLuint chunkVAO = 0;
     GLuint chunkVBO = 0;
@@ -61,7 +67,7 @@ public:
         {{ 0, 0,-1}, {{0,0,0},{0,1,0},{1,1,0},{1,0,0}}, {{1,0},{1,1},{0,1},{0,0}}},
     };
 
-    std::vector<std::pair<uint8_t, std::vector<glm::vec2>>> voxelTextureTable = {};
+    std::map<uint8_t, std::vector<glm::vec2>> voxelTextureTable = {};
 
     Chunk(const TextureAtlasData &tad, glm::vec3 spawnPos);
 

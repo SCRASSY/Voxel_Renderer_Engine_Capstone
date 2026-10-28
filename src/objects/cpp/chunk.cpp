@@ -6,16 +6,42 @@
 
 Chunk::Chunk(const TextureAtlasData &tad, glm::vec3 spawnPos) {
     worldPos = spawnPos;
+    chunkTad = tad;
     textureTileSize = object::calculate_texture_atlas_tile_size(tad.textureAtlasWidth, tad.textureAtlasHeight);
 
     voxelTextureTable = {
-        {1, {
-            object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
-            object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
-            object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
-            object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
-            object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
-            object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight)}
+        // DIRT
+        {
+            1, {
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight)
+            }
+        },
+        // SAND
+        {
+            2, {
+                object::calculate_texture_uv_from_atlas(2, 14, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 14, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 14, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 14, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 14, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 14, tad.textureAtlasWidth, tad.textureAtlasHeight)
+            }
+        },
+        // GRASS
+        {
+            3, {
+                object::calculate_texture_uv_from_atlas(0, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(3, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(3, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(3, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(3, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+                object::calculate_texture_uv_from_atlas(2, 15, tad.textureAtlasWidth, tad.textureAtlasHeight),
+            }
         },
     };
 }
@@ -27,7 +53,7 @@ bool Chunk::is_solid(const int x, const int y, const int z) const {
     }
 
     // checks if the block is outside this chunk
-    if (x >= CHUNK_SIZE || y >= CHUNK_SIZE || z >= CHUNK_SIZE) {
+    if (x >= CHUNK_SIZE_X || y >= CHUNK_SIZE_Y || z >= CHUNK_SIZE_Z) {
         return false;
     }
 
@@ -39,9 +65,9 @@ void Chunk::build_chunk(Chunk &chunk) {
     std::vector<Vertex> vertices = {};
 
     // loops through every voxel in this chunk
-    for (int x = 0; x < CHUNK_SIZE; ++x) {
-        for (int y = 0; y < CHUNK_SIZE; ++y) {
-            for (int z = 0; z < CHUNK_SIZE; ++z) {
+    for (int x = 0; x < CHUNK_SIZE_X; ++x) {
+        for (int y = 0; y < CHUNK_SIZE_Y; ++y) {
+            for (int z = 0; z < CHUNK_SIZE_Z; ++z) {
                 // continues if the current voxel is an air block
                 if (!chunk.is_solid(x, y, z)) continue;
 
@@ -59,15 +85,6 @@ void Chunk::build_chunk(Chunk &chunk) {
                     // INDEX 4 = FRONT FACE
                     // INDEX 5 = BACK FACE
 
-                    // DIRT
-                    if (blockType == 0) {
-
-                    }
-                    // LOG
-                    if (blockType == 1) {
-
-                    }
-
                     // the position of the voxel being checked adjacent to the current voxel
                     const int pos_x = x + currentFace.neighbour[0];
                     const int pos_y = y + currentFace.neighbour[1];
@@ -80,20 +97,18 @@ void Chunk::build_chunk(Chunk &chunk) {
                     const int order[6] = {0, 1, 2, 0, 2, 3};
                     for (int i: order) {
 
-                        // calculates the UV coords for this vertex
-                        const float U = object::normalize_to_range(currentFace.uvs[i][0], voxelTextureTable[0].second[0].x, voxelTextureTable[0].second[0].x + textureTileSize.x);
-                        const float V = object::normalize_to_range(currentFace.uvs[i][1], voxelTextureTable[0].second[0].y, voxelTextureTable[0].second[0].y + textureTileSize.y);
+                        const float valueU = currentFace.uvs[i][0];
+                        const float valueV = currentFace.uvs[i][1];
 
-                        // const float uvMinX = object::normalize_to_range();
-                        // const float uvMaxX = object::normalize_to_range();
-                        // const float uvMinY = object::normalize_to_range();
-                        // const float uvMaxY = object::normalize_to_range();
-                        //
-                        // const float uvMinX = object::normalize_to_range(voxelTextureTable[0].second[0], 0.0f, static_cast<float>(tad.textureAtlasWidth));
-                        // const float uvMaxX = object::normalize_to_range(voxelTextureTable[0].second[0] + tileSize.x, 0.0f, static_cast<float>(tad.textureAtlasWidth));
-                        // const float uvMinY = object::normalize_to_range(voxelTextureTable[0].second[0], 0.0f, static_cast<float>(tad.textureAtlasWidth));
-                        // const float uvMaxY = object::normalize_to_range(voxelTextureTable[0].second[0] + tileSize.y, 0.0f, static_cast<float>(tad.textureAtlasWidth));
-                        //
+                        const float tilePosU = voxelTextureTable.at(blockType)[f].x;
+                        const float tilePosV = voxelTextureTable.at(blockType)[f].y;
+
+                        const float finalValueU = tilePosU + valueU * textureTileSize.x;
+                        const float finalValueV = tilePosV + valueV * textureTileSize.y;
+
+                        // calculates the UV coords for this vertex
+                        const float U = object::normalize_to_range(finalValueU, 0.0f, static_cast<float>(chunkTad.textureAtlasWidth));
+                        const float V = object::normalize_to_range(finalValueV, 0.0f, static_cast<float>(chunkTad.textureAtlasHeight));
 
                         Vertex vertexToAdd = {
                             .x = x + currentFace.corners[i][0],
