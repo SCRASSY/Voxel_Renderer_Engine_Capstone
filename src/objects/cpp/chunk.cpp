@@ -6,7 +6,6 @@
 
 Chunk::Chunk(const TextureAtlasData &tad, glm::vec3 spawnPos) {
     worldPos = spawnPos;
-    chunkTad = tad;
     textureTileSize = object::calculate_texture_atlas_tile_size(tad.textureAtlasWidth, tad.textureAtlasHeight);
 
     voxelTextureTable = {
@@ -59,96 +58,6 @@ bool Chunk::is_solid(const int x, const int y, const int z) const {
 
     // returns true if the block is not an air block
     return voxels[x][y][z] != 0;
-}
-
-void Chunk::build_chunk(Chunk &chunk) {
-    std::vector<Vertex> vertices = {};
-
-    // loops through every voxel in this chunk
-    for (int x = 0; x < CHUNK_SIZE_X; ++x) {
-        for (int y = 0; y < CHUNK_SIZE_Y; ++y) {
-            for (int z = 0; z < CHUNK_SIZE_Z; ++z) {
-                // continues if the current voxel is an air block
-                if (!chunk.is_solid(x, y, z)) continue;
-
-                // gets the current block type
-                const uint8_t blockType = voxels[x][y][z];
-
-                // loops through every face side of the current voxel
-                for (int f = 0; f < std::size(FACES); ++f) {
-                    const FaceData currentFace = FACES[f];
-
-                    // INDEX 0 = TOP FACE
-                    // INDEX 1 = BOTTOM FACE
-                    // INDEX 2 = RIGHT FACE
-                    // INDEX 3 = LEFT FACE
-                    // INDEX 4 = FRONT FACE
-                    // INDEX 5 = BACK FACE
-
-                    // the position of the voxel being checked adjacent to the current voxel
-                    const int pos_x = x + currentFace.neighbour[0];
-                    const int pos_y = y + currentFace.neighbour[1];
-                    const int pos_z = z + currentFace.neighbour[2];
-
-                    // if the voxel adjacent to this current voxel being checked is solid then we can skip this face since it will not be seen
-                    if (chunk.is_solid(pos_x, pos_y, pos_z)) continue;
-
-                    // the order to draw the current face of the voxel
-                    const int order[6] = {0, 1, 2, 0, 2, 3};
-                    for (int i: order) {
-
-                        const float valueU = currentFace.uvs[i][0];
-                        const float valueV = currentFace.uvs[i][1];
-
-                        const float tilePosU = voxelTextureTable.at(blockType)[f].x;
-                        const float tilePosV = voxelTextureTable.at(blockType)[f].y;
-
-                        const float finalValueU = tilePosU + valueU * textureTileSize.x;
-                        const float finalValueV = tilePosV + valueV * textureTileSize.y;
-
-                        // calculates the UV coords for this vertex
-                        const float U = object::normalize_to_range(finalValueU, 0.0f, static_cast<float>(chunkTad.textureAtlasWidth));
-                        const float V = object::normalize_to_range(finalValueV, 0.0f, static_cast<float>(chunkTad.textureAtlasHeight));
-
-                        Vertex vertexToAdd = {
-                            .x = x + currentFace.corners[i][0],
-                            .y = y + currentFace.corners[i][1],
-                            .z = z + currentFace.corners[i][2],
-
-                            .nx = static_cast<float>(currentFace.neighbour[0]),
-                            .ny = static_cast<float>(currentFace.neighbour[1]),
-                            .nz = static_cast<float>(currentFace.neighbour[2]),
-
-                            .u = U,
-                            .v = V
-                        };
-                        vertices.push_back(vertexToAdd);
-                    }
-                }
-            }
-        }
-    }
-
-    // uses the size of the vertices vector to set the vertex count of this chunk
-    chunk.vertexCount = static_cast<int>(vertices.size());
-
-    // if there is no VAO & VBO set for the chunk it will be generated
-    if (chunk.chunkVAO == 0) {
-        glGenVertexArrays(1, &chunk.chunkVAO);
-        glGenBuffers(1, &chunk.chunkVBO);
-    }
-
-    glBindVertexArray(chunk.chunkVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, chunk.chunkVBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(3 * sizeof(float)));
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(6 * sizeof(float)));
-
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
 }
 
 void Chunk::draw_chunk() {

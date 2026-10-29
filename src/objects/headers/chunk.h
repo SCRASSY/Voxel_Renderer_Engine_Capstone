@@ -39,10 +39,10 @@ struct Vertex {
 
 class Chunk {
 public:
+    int chunkID = 0;
+
     uint8_t voxels[CHUNK_SIZE_X][CHUNK_SIZE_Y][CHUNK_SIZE_Z] = {}; // all indices = 0 / air
     glm::vec3 worldPos{0.0f};
-
-    TextureAtlasData chunkTad = {};
 
     GLuint chunkVAO = 0;
     GLuint chunkVBO = 0;
@@ -72,7 +72,7 @@ public:
     Chunk(const TextureAtlasData &tad, glm::vec3 spawnPos);
 
     bool is_solid(int x, int y, int z) const;
-    void build_chunk(Chunk& chunk);
+    void build_chunk(Chunk& chunk, std::vector<std::pair<glm::vec2, Chunk>> &_worldChunks);
     void draw_chunk();
     glm::vec2 get_voxel_face_uv_coords();
 };

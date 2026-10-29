@@ -1,4 +1,5 @@
 #include <iostream>
+#include <ranges>
 #include <thread>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -12,6 +13,7 @@
 #include "objects/headers/camera.h"
 #include "objects/headers/chunk.h"
 #include "objects/headers/light.h"
+#include <tracy/Tracy.hpp>
 
 constexpr int WINDOW_WIDTH = 2000;
 constexpr int WINDOW_HEIGHT = 1200;
@@ -32,7 +34,8 @@ static bool isFirstMouseCall = true;
 
 static camera *playerCamObj = nullptr;
 
-static std::vector<Chunk> worldChunks = {};
+// key holds the index position of the chunk in the world, the value is the actual chunk
+static std::vector<std::pair<glm::ivec2, Chunk>> worldChunks = {};
 
 static TextureAtlasData gameGlobalTextureAtlasData = {};
 
@@ -44,7 +47,8 @@ static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 static void process_input();
 static void link_callback_functions();
 static bool create_engine_window();
-static void generate_chunk(glm::vec3 chunkPos);
+static Chunk generate_chunk_data(glm::vec3 chunkPos);
+static void build_chunks(std::vector<std::pair<glm::ivec2, Chunk>> &chunksList);
 static void generate_terrain();
 
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
@@ -124,16 +128,25 @@ int main() {
         .textureAtlasHeight = textureAtlasHeight
     };
 
-    constexpr int terrainRadius = 8;
+    // -- GENERATE THE WORLD/TERRAIN DATA --
+    constexpr int terrainRadius = 16;
     for (int x = -terrainRadius / 2; x < terrainRadius / 2; ++x) {
         for (int z = -terrainRadius / 2; z < terrainRadius / 2; ++z) {
             const auto worldOrigin = glm::vec3(0.0f, -CHUNK_SIZE_Y / 2, 0.0f);
             const auto newChunkPos = worldOrigin + glm::vec3(CHUNK_SIZE_X * x, 0.0f, CHUNK_SIZE_Z * z);
 
             // generates a new game chunk & adds it to the game worlds chunk list
-            generate_chunk(newChunkPos);
+            const std::pair chunkPair = {glm::vec2(x + terrainRadius, z + terrainRadius), generate_chunk_data(newChunkPos)};
+            worldChunks.emplace_back(chunkPair);
         }
     }
+
+    // -- BUILD THE WORLD/TERRAIN VERTICES/FACES --
+    build_chunks(worldChunks);
+
+    double fpsTimer = 0.0;
+    int fpsFrames = 0;
+    float averageFps = 0.0f;
 
     // main render loop
     while (!glfwWindowShouldClose(window)) {
@@ -143,6 +156,22 @@ int main() {
 
         update_inputs();
         update_render();
+
+        // used to send the current fps to the tracy profiler
+        FrameMark;
+
+        fpsFrames++;
+        fpsTimer += deltaTime;
+        if (fpsTimer >= 0.5) {
+            averageFps = static_cast<float>(fpsFrames / fpsTimer);
+            TracyPlot("Avg FPS", averageFps);
+
+            const std::string title = "Scrassy's Voxel Renderer | " + std::to_string(static_cast<int>(averageFps)) + " FPS";
+            glfwSetWindowTitle(window, title.c_str());
+
+            fpsTimer = 0.0;
+            fpsFrames = 0;
+        }
     }
 
     glfwTerminate();
@@ -267,7 +296,9 @@ void update_render() {
     // }
 
     // -- RENDER CHUNK --
-    for (auto &currentChunk: worldChunks) {
+    for (auto &currentChunkData: worldChunks) {
+        const auto currentChunk = currentChunkData.second;
+
         auto model = glm::translate(glm::mat4(1.0f), currentChunk.worldPos);
         //auto lightColorVec = glm::vec3(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b);
         //auto lightViewPos = glm::vec3(playerCamObj->cameraView * glm::vec4(lights[0].position, 1.0f)); // converts the lights position world space to the cameras view space
@@ -288,10 +319,6 @@ void update_render() {
         glBindVertexArray(currentChunk.chunkVAO);
         glDrawArrays(GL_TRIANGLES, 0, currentChunk.vertexCount);
     }
-
-
-
-
 
     // finally swap the buffers to show the new final render
     glfwSwapBuffers(window);
@@ -334,7 +361,7 @@ void link_callback_functions() {
 }
 bool create_engine_window() {
     // creates the program window & checks if it was created successfully, otherwise terminate the program
-    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "LearnOpenGL", nullptr, nullptr);
+    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Scrassy's Voxel Renderer", nullptr, nullptr);
     if (!window) {
         std::cout << "Failed to create GLFW window.\n";
         glfwTerminate();
@@ -346,32 +373,172 @@ bool create_engine_window() {
 
     return true;
 }
-
-void generate_chunk(glm::vec3 chunkPos) {
-    // -- CHUNK TESTING --
-    Chunk localChunk(gameGlobalTextureAtlasData, chunkPos);
+Chunk generate_chunk_data(glm::vec3 chunkPos) {
+    auto localChunk = Chunk(gameGlobalTextureAtlasData, chunkPos);
     localChunk.worldPos = chunkPos;
+    localChunk.chunkID = worldChunks.size();
 
-    // creates the voxels in the chunk
+    // creates the voxel data in this chunk
     for (int x = 0; x < CHUNK_SIZE_X; ++x) {
         for (int y = 0; y < CHUNK_SIZE_Y; ++y) {
             for (int z = 0; z < CHUNK_SIZE_Z; ++z) {
+                if (y > CHUNK_SIZE_Y / 2) {
+                    localChunk.voxels[x][y][z] = 0;
+                    continue;
+                }
+                if (localChunk.chunkID % 2 == 0) {
+                    localChunk.voxels[x][y][z] = 2;
+                    continue;
+                }
                 if (y < CHUNK_SIZE_Y / 2) {
                     localChunk.voxels[x][y][z] = 1;
                     continue;
                 }
                 if (y == CHUNK_SIZE_Y / 2) {
                     localChunk.voxels[x][y][z] = 3;
-                    continue;
                 }
-                localChunk.voxels[x][y][z] = 0;
             }
         }
     }
 
-    localChunk.build_chunk(localChunk);
-    worldChunks.push_back(localChunk);
+    return localChunk;
 }
+
+void build_chunks(std::vector<std::pair<glm::ivec2, Chunk>> &chunksList) {
+    for (auto &chunkData: chunksList) {
+        auto chunkIndex = chunkData.first;
+        auto &chunkObj = chunkData.second;
+
+        std::vector<Vertex> vertices = {};
+
+        // loops through every voxel in this chunk
+        for (int x = 0; x < CHUNK_SIZE_X; ++x) {
+            for (int y = 0; y < CHUNK_SIZE_Y; ++y) {
+                for (int z = 0; z < CHUNK_SIZE_Z; ++z) {
+
+                    // continues if the current voxel is an air block
+                    if (!chunkObj.is_solid(x, y, z)) continue;
+
+                    // gets the current block type
+                    const uint8_t blockType = chunkObj.voxels[x][y][z];
+
+                    // loops through every face side of the current voxel
+                    for (int f = 0; f < std::size(chunkObj.FACES); ++f) {
+                        const FaceData currentFace = chunkObj.FACES[f];
+
+                        // INDEX 0 = TOP FACE
+                        // INDEX 1 = BOTTOM FACE
+                        // INDEX 2 = RIGHT FACE
+                        // INDEX 3 = LEFT FACE
+                        // INDEX 4 = FRONT FACE
+                        // INDEX 5 = BACK FACE
+
+                        // the position of the voxel being checked adjacent to the current voxel
+                        const int pos_x = x + currentFace.neighbour[0];
+                        const int pos_y = y + currentFace.neighbour[1];
+                        const int pos_z = z + currentFace.neighbour[2];
+
+                        // if the voxel adjacent to this current voxel being checked is solid then we can skip this face since it will not be seen
+                        if (chunkObj.is_solid(pos_x, pos_y, pos_z)) continue;
+
+                        // -- NEED TO CHECK IF THIS FACE IS ON THE EDGE OF A CHUNK AND IF THERE IS ANOTHER CHUNK HIDING IT
+
+                        // checks if the current voxel is at the start or end of the chunk on the x axis
+                        if (pos_x == -1 || pos_x == CHUNK_SIZE_X) {
+                            const int signValue = (pos_x > 0) - (pos_x < 0);
+                            auto target = chunkIndex + glm::ivec2(signValue, 0.0f);
+
+                            auto it = std::ranges::find_if(chunksList, [&](const auto &p) {
+                                return p.first == target;
+                            });
+
+                            // checks if the iterator found a valid chunk
+                            if (it != chunksList.end()) {
+                                constexpr int size = CHUNK_SIZE_X - 1;
+                                const int newPosX = (pos_x % size + size) % size;
+
+                                // skips this face if the voxel next to it in the adjacent chunk is solid
+                                if (it->second.is_solid(newPosX, y, z)) continue;
+                            }
+                        }
+
+                        // checks if the current voxel is at the start or end of the chunk on the z axis
+                        if (pos_z == -1 || pos_z == CHUNK_SIZE_Z) {
+                            const int signValue = (pos_z > 0) - (pos_z < 0);
+                            auto target = chunkIndex + glm::ivec2(0.0f, signValue);
+
+                            auto it = std::ranges::find_if(chunksList, [&](const auto &p) {
+                                return p.first == target;
+                            });
+
+                            // checks if the iterator found a valid chunk
+                            if (it != chunksList.end()) {
+                                constexpr int size = CHUNK_SIZE_Z - 1;
+                                const int newPosZ = (pos_z % size + size) % size;
+
+                                // skips this face if the voxel next to it in the adjacent chunk is solid
+                                if (it->second.is_solid(x, y, newPosZ)) continue;
+                            }
+                        }
+
+                        // the order to draw the current face of the voxel
+                        const int order[6] = {0, 1, 2, 0, 2, 3};
+                        for (int i: order) {
+                            const float valueU = currentFace.uvs[i][0];
+                            const float valueV = currentFace.uvs[i][1];
+
+                            const float tilePosU = chunkObj.voxelTextureTable.at(blockType)[f].x;
+                            const float tilePosV = chunkObj.voxelTextureTable.at(blockType)[f].y;
+
+                            const float finalValueU = tilePosU + valueU * chunkObj.textureTileSize.x;
+                            const float finalValueV = tilePosV + valueV * chunkObj.textureTileSize.y;
+
+                            // calculates the UV coords for this vertex
+                            const float U = object::normalize_to_range(finalValueU, 0.0f, static_cast<float>(gameGlobalTextureAtlasData.textureAtlasWidth));
+                            const float V = object::normalize_to_range(finalValueV, 0.0f, static_cast<float>(gameGlobalTextureAtlasData.textureAtlasHeight));
+
+                            Vertex vertexToAdd = {
+                                .x = x + currentFace.corners[i][0],
+                                .y = y + currentFace.corners[i][1],
+                                .z = z + currentFace.corners[i][2],
+
+                                .nx = static_cast<float>(currentFace.neighbour[0]),
+                                .ny = static_cast<float>(currentFace.neighbour[1]),
+                                .nz = static_cast<float>(currentFace.neighbour[2]),
+
+                                .u = U,
+                                .v = V
+                            };
+                            vertices.push_back(vertexToAdd);
+                        }
+                    }
+                }
+            }
+        }
+
+        // uses the size of the vertices vector to set the vertex count of this chunk
+        chunkObj.vertexCount = static_cast<int>(vertices.size());
+
+        // if there is no VAO & VBO set for the chunk it will be generated
+        if (chunkObj.chunkVAO == 0) {
+            glGenVertexArrays(1, &chunkObj.chunkVAO);
+            glGenBuffers(1, &chunkObj.chunkVBO);
+        }
+
+        glBindVertexArray(chunkObj.chunkVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, chunkObj.chunkVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void *>(3 * sizeof(float)));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void *>(6 * sizeof(float)));
+
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+    }
+}
+
 void mouse_callback(GLFWwindow *window, double xpos, double ypos) {
     if (isFirstMouseCall) {
         lastMouseX = xpos;

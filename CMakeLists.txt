@@ -44,8 +44,21 @@ target_include_directories(OpenGL_Tutorial PRIVATE
         ${GLM_ROOT}
 )
 
+include(FetchContent)
+FetchContent_Declare(
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG        v0.14.1        # better: pin to a release tag, see note below
+        GIT_SHALLOW    TRUE
+        GIT_PROGRESS   TRUE
+)
+option(TRACY_ENABLE "" ON)
+option(TRACY_ON_DEMAND "" ON)
+FetchContent_MakeAvailable(tracy)
+
 target_link_libraries(OpenGL_Tutorial PRIVATE
         glfw
         opengl32
         gdi32
+        TracyClient
 )
